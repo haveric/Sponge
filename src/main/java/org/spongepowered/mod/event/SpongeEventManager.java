@@ -29,6 +29,7 @@ import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.common.event.FMLEvent;
+import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import org.spongepowered.api.service.event.EventManager;
 import org.spongepowered.api.util.annotation.NonnullByDefault;
 import org.spongepowered.api.util.event.Event;
@@ -122,6 +123,10 @@ public class SpongeEventManager implements EventManager {
             return false;
         }
         return true;
+    }
+
+    public void post(EventPriority priority, net.minecraftforge.fml.common.eventhandler.Event event) {
+        // TOOD: Call sponge handlers for priority [events that can't be simple-mirrored], update fml event after
     }
 
     private Map<Method, Subscribe> getAnnotationMap(Object o) {

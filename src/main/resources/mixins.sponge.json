@@ -47,6 +47,7 @@
     "entity.living.monster.MixinEntityWither",
     "entity.living.monster.MixinEntityZombie",
     "entity.player.MixinEntityPlayerMP",
+    "event.fml.MixinEventPriority",
     "event.player.MixinEventPlayer",
     "event.player.MixinEventPlayerFML",
     "event.player.MixinEventPlayerInteract",
