@@ -60,7 +60,7 @@ public class SpongeEventBus implements EventManager {
     private static final Logger log = LoggerFactory.getLogger(SpongeEventBus.class);
 
     private final PluginManager pluginManager;
-    private final HandlerFactory handlerFactory = new InvokeHandlerFactory();
+    private final HandlerFactory handlerFactory = new HandlerClassFactory("org.spongepowered.mod.event.handler");
     private final ConcurrentMap<Class<?>, HandlerSet> handlersByEvent = Maps.newConcurrentMap();
     private final LoadingCache<Class<?>, List<HandlerSet>> handlerHierarchyCache =
             CacheBuilder.newBuilder().build(new CacheLoader<Class<?>, List<HandlerSet>>() {
