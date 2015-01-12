@@ -34,6 +34,7 @@ import net.minecraft.world.storage.WorldInfo;
 import org.spongepowered.api.block.BlockLoc;
 import org.spongepowered.api.entity.Entity;
 import org.spongepowered.api.entity.EntityType;
+import org.spongepowered.api.service.permission.context.Context;
 import org.spongepowered.api.util.annotation.NonnullByDefault;
 import org.spongepowered.api.world.Chunk;
 import org.spongepowered.api.world.World;
@@ -105,5 +106,10 @@ public abstract class MixinWorld implements World {
     @Override
     public Optional<Entity> createEntity(EntityType type, Vector3d position) {
         return Optional.absent();
+    }
+
+    @Override
+    public Context getContext() {
+        return new Context(Context.WORLD_KEY, getName()); // TODO: Reuse the context object
     }
 }

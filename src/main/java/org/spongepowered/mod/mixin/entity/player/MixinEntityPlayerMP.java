@@ -26,11 +26,13 @@ package org.spongepowered.mod.mixin.entity.player;
 
 import java.util.Locale;
 
+import net.minecraft.command.ICommand;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.network.NetHandlerPlayServer;
 import net.minecraft.network.play.server.S02PacketChat;
 import net.minecraft.network.play.server.S45PacketTitle;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.world.World;
 
@@ -41,10 +43,7 @@ import org.spongepowered.api.text.message.Message;
 import org.spongepowered.api.text.title.Title;
 import org.spongepowered.api.util.annotation.NonnullByDefault;
 import org.spongepowered.api.util.command.CommandSource;
-import org.spongepowered.asm.mixin.Implements;
-import org.spongepowered.asm.mixin.Interface;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.*;
 import org.spongepowered.mod.text.chat.SpongeChatType;
 import org.spongepowered.mod.text.message.SpongeMessage;
 import org.spongepowered.mod.text.message.SpongeMessageText;
@@ -52,6 +51,7 @@ import org.spongepowered.mod.text.message.SpongeMessageText;
 import com.mojang.authlib.GameProfile;
 import org.spongepowered.mod.text.title.SpongeTitle;
 
+// TODO: Implement Subject methods as wrapper around subject provided by the PermissionService
 @NonnullByDefault
 @Mixin(EntityPlayerMP.class)
 @Implements(@Interface(iface = Player.class, prefix = "playermp$"))
@@ -127,5 +127,11 @@ public abstract class MixinEntityPlayerMP extends EntityPlayer implements Comman
 
     public void playermp$clearTitle() {
         throw new UnsupportedOperationException();
+    }
+
+    @Overwrite
+    public boolean canCommandSenderUseCommand(int permissionLevel, String commandName) {
+        ICommand command = (ICommand) MinecraftServer.getServer().getCommandManager().getCommands().get(commandName);
+        return hasPermission("minecraft.command." + commandName); // All MC commands are now controlled by permission
     }
 }
