@@ -31,7 +31,6 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.reflect.TypeToken;
 import com.google.inject.Inject;
@@ -48,10 +47,9 @@ import org.spongepowered.api.util.event.Subscribe;
 import javax.annotation.Nullable;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -59,24 +57,22 @@ public class SpongeEventBus implements EventManager {
 
     private static final Logger log = LoggerFactory.getLogger(SpongeEventBus.class);
 
+    private final Object lock = new Object();
     private final PluginManager pluginManager;
     private final HandlerFactory handlerFactory = new HandlerClassFactory("org.spongepowered.mod.event.handler");
-    private final ConcurrentMap<Class<?>, HandlerSet> handlersByEvent = Maps.newConcurrentMap();
-    private final LoadingCache<Class<?>, List<HandlerSet>> handlerHierarchyCache =
-            CacheBuilder.newBuilder().build(new CacheLoader<Class<?>, List<HandlerSet>>() {
-                @SuppressWarnings("unchecked")
+    private final Multimap<Class<?>, RegisteredHandler> handlersByEvent = HashMultimap.create();
+
+    /**
+     * A cache of all the handlers for an event type for quick event posting.
+     *
+     * <p>The cache is currently entirely invalidated if handlers are added
+     * or removed.</p>
+     */
+    private final LoadingCache<Class<?>, List<Handler>> handlersCache =
+            CacheBuilder.newBuilder().build(new CacheLoader<Class<?>, List<Handler>>() {
                 @Override
-                public List<HandlerSet> load(Class<?> key) throws Exception {
-                    List<HandlerSet> handlerSets = Lists.newArrayList();
-                    Set<Class<?>> types = (Set) TypeToken.of(key).getTypes().rawTypes();
-                    synchronized (handlersByEvent) {
-                        for (Class<?> type : types) {
-                            if (Event.class.isAssignableFrom(type)) {
-                                handlerSets.add(getHandlerSet(type));
-                            }
-                        }
-                    }
-                    return handlerSets;
+                public List<Handler> load(Class<?> type) throws Exception {
+                    return bakeHandlers(type);
                 }
             });
 
@@ -86,26 +82,36 @@ public class SpongeEventBus implements EventManager {
         this.pluginManager = pluginManager;
     }
 
-    private HandlerSet getHandlerSet(Class<?> type) {
-        checkNotNull(type, "type");
-        @Nullable HandlerSet handlerSets;
-        synchronized (handlersByEvent) {
-            handlerSets = handlersByEvent.get(type);
-            if (handlerSets == null) {
-                handlerSets = new HandlerSet();
-                handlersByEvent.put(type, handlerSets);
+    @SuppressWarnings("unchecked")
+    private List<Handler> bakeHandlers(Class<?> rootType) {
+        List<RegisteredHandler> ordered = Lists.newArrayList();
+        List<Handler> handlers = Lists.newArrayList();
+        Set<Class<?>> types = (Set) TypeToken.of(rootType).getTypes().rawTypes();
+
+        synchronized (this.lock) {
+            for (Class<?> type : types) {
+                if (Event.class.isAssignableFrom(type)) {
+                    ordered.addAll(this.handlersByEvent.get(type));
+                }
             }
         }
-        return handlerSets;
+
+        Collections.sort(ordered);
+
+        for (RegisteredHandler o : ordered) {
+            handlers.add(o.getHandler());
+        }
+
+        return handlers;
     }
 
-    private List<HandlerSet> getHandlerSetHierarchy(Class<?> type) {
-        return handlerHierarchyCache.getUnchecked(type);
+    private List<Handler> getHandlers(Class<?> type) {
+        return this.handlersCache.getUnchecked(type);
     }
 
     @SuppressWarnings("unchecked")
-    private Multimap<Class<?>, OrderedHandler> findAllMethodHandlers(Object object) {
-        Multimap<Class<?>, OrderedHandler> handlers = HashMultimap.create();
+    private List<Subscriber> findAllSubscribers(Object object) {
+        List<Subscriber> subscribers = Lists.newArrayList();
         Class<?> type = object.getClass();
 
         for (Method method : type.getMethods()) {
@@ -115,9 +121,9 @@ public class SpongeEventBus implements EventManager {
                 Class<?>[] paramTypes = method.getParameterTypes();
 
                 if (isValidHandler(method)) {
-                    Class<? extends Event> eventClass = (Class<? extends Event>) paramTypes[0];
-                    Handler handler = createHandler(object, method, subscribe.ignoreCancelled());
-                    handlers.put(eventClass, new OrderedHandler(handler, subscribe.order()));
+                    Class<Event> eventClass = (Class<Event>) paramTypes[0];
+                    Handler handler = this.handlerFactory.createHandler(object, method, subscribe.ignoreCancelled());
+                    subscribers.add(new Subscriber(eventClass, handler, subscribe.order()));
                 } else {
                     log.warn("The method {} on {} has @{} but has the wrong signature",
                             method, method.getDeclaringClass().getName(), Subscribe.class.getName());
@@ -125,20 +131,59 @@ public class SpongeEventBus implements EventManager {
             }
         }
 
-        return handlers;
+        return subscribers;
     }
 
     public boolean register(Class<?> type, Handler handler, Order order, PluginContainer container) {
-        getHandlerSetHierarchy(type); // Build cache early
-        return getHandlerSet(type).register(handler, order, container);
+        return register(new Subscriber(type, handler, order), container);
+    }
+
+    public boolean register(Subscriber subscriber, PluginContainer container) {
+        return registerAll(Lists.newArrayList(subscriber), container);
+    }
+
+    private boolean registerAll(List<Subscriber> subscribers, PluginContainer container) {
+        synchronized (this.lock) {
+            boolean changed = false;
+
+            for (Subscriber sub : subscribers) {
+                if (this.handlersByEvent.put(sub.getEventClass(), new RegisteredHandler(sub.getHandler(), sub.getOrder(), container))) {
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                this.handlersCache.invalidateAll();
+            }
+
+            return changed;
+        }
     }
 
     public boolean unregister(Class<?> type, Handler handler) {
-        return getHandlerSet(type).remove(handler);
+        return unregister(new Subscriber(type, handler));
     }
 
-    private Handler createHandler(Object object, Method method, boolean ignoreCancelled) {
-        return handlerFactory.createHandler(object, method, ignoreCancelled);
+    public boolean unregister(Subscriber subscriber) {
+        return unregisterAll(Lists.newArrayList(subscriber));
+    }
+
+    public boolean unregisterAll(List<Subscriber> subscribers) {
+        synchronized (this.lock) {
+            boolean changed = false;
+
+            for (Subscriber sub : subscribers) {
+                if (this.handlersByEvent.remove(sub.getEventClass(), RegisteredHandler.createForComparison(sub.getHandler()))) {
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                this.handlersCache.invalidateAll();
+            }
+
+            return changed;
+        }
     }
 
     private void callListener(Handler handler, Event event) {
@@ -155,36 +200,26 @@ public class SpongeEventBus implements EventManager {
         checkNotNull(object, "plugin");
         checkNotNull(object, "object");
 
-        Optional<PluginContainer> container = pluginManager.fromInstance(object);
+        Optional<PluginContainer> container = this.pluginManager.fromInstance(object);
         if (!container.isPresent()) {
             throw new IllegalArgumentException("The specified object is not a plugin object");
         }
 
-        for (Map.Entry<Class<?>, OrderedHandler> entry : findAllMethodHandlers(object).entries()) {
-            register(entry.getKey(), entry.getValue().getHandler(), entry.getValue().getOrder(), container.get());
-        }
+        registerAll(findAllSubscribers(object), container.get());
     }
 
     @Override
     public void unregister(Object object) {
         checkNotNull(object, "object");
-
-        for (Map.Entry<Class<?>, OrderedHandler> entry : findAllMethodHandlers(object).entries()) {
-            unregister(entry.getKey(), entry.getValue().getHandler());
-        }
+        unregisterAll(findAllSubscribers(object));
     }
 
     @Override
     public boolean post(Event event) {
         checkNotNull(event, "event");
 
-        List<HandlerSet> handlerSets = getHandlerSetHierarchy(event.getClass());
-        for (Order order : Order.values()) {
-            for (HandlerSet handlerSet : handlerSets) {
-                for (Handler handler : handlerSet.getImmutable(order)) {
-                    callListener(handler, event);
-                }
-            }
+        for (Handler handler : getHandlers(event.getClass())) {
+            callListener(handler, event);
         }
 
         return event instanceof Cancellable && ((Cancellable) event).isCancelled();

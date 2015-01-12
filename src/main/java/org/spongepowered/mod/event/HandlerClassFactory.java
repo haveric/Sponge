@@ -68,10 +68,10 @@ class HandlerClassFactory implements HandlerFactory {
 
     @Override
     public Handler createHandler(Object object, Method method, boolean ignoreCancelled) {
-        synchronized (cache) {
+        synchronized (this.cache) {
             CacheKey key = new CacheKey(object.getClass(), method, ignoreCancelled);
             try {
-                return (Handler) cache.getUnchecked(key)
+                return (Handler) this.cache.getUnchecked(key)
                         .getConstructor(object.getClass(), Method.class)
                         .newInstance(object, method);
             } catch (Exception e) {
@@ -83,9 +83,9 @@ class HandlerClassFactory implements HandlerFactory {
     @SuppressWarnings("unchecked")
     private Class<? extends Handler> createClass(Class<?> type, Method method, boolean ignoreCancelled) {
         Class<?> eventClass = method.getParameterTypes()[0];
-        String name = targetPackage + "." + eventClass.getSimpleName() + "Handler_" + type.getSimpleName() + "_" + method.getName() + index.incrementAndGet();
+        String name = this.targetPackage + "." + eventClass.getSimpleName() + "Handler_" + type.getSimpleName() + "_" + method.getName() + this.index.incrementAndGet();
         byte[] bytes = generateClass(type, method, eventClass, ignoreCancelled, name);
-        return (Class<? extends Handler>) classLoader.defineClass(name, bytes);
+        return (Class<? extends Handler>) this.classLoader.defineClass(name, bytes);
     }
 
     public byte[] generateClass(Class<?> objectClass, Method method, Class<?> eventClass, boolean ignoreCancelled, String className) {
@@ -238,18 +238,18 @@ class HandlerClassFactory implements HandlerFactory {
 
             CacheKey cacheKey = (CacheKey) o;
 
-            if (ignoreCancelled != cacheKey.ignoreCancelled) return false;
-            if (!method.equals(cacheKey.method)) return false;
-            if (!type.equals(cacheKey.type)) return false;
+            if (this.ignoreCancelled != cacheKey.ignoreCancelled) return false;
+            if (!this.method.equals(cacheKey.method)) return false;
+            if (!this.type.equals(cacheKey.type)) return false;
 
             return true;
         }
 
         @Override
         public int hashCode() {
-            int result = type.hashCode();
-            result = 31 * result + method.hashCode();
-            result = 31 * result + (ignoreCancelled ? 1 : 0);
+            int result = this.type.hashCode();
+            result = 31 * result + this.method.hashCode();
+            result = 31 * result + (this.ignoreCancelled ? 1 : 0);
             return result;
         }
     }

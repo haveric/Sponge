@@ -27,35 +27,37 @@ package org.spongepowered.mod.event;
 
 import org.spongepowered.api.util.event.Order;
 
-class OrderedHandler {
+import static com.google.common.base.Preconditions.checkNotNull;
 
+class Subscriber {
+
+    private final Class<?> eventClass;
     private final Handler handler;
     private final Order order;
 
-    OrderedHandler(Handler handler, Order order) {
+    Subscriber(Class<?> eventClass, Handler handler) {
+        this(eventClass, handler, Order.DEFAULT);
+    }
+
+    Subscriber(Class<?> eventClass, Handler handler, Order order) {
+        checkNotNull(eventClass, "eventClass");
+        checkNotNull(handler, "handler");
+        checkNotNull(order, "order");
+        this.eventClass = eventClass;
         this.handler = handler;
         this.order = order;
     }
 
+    public Class<?> getEventClass() {
+        return this.eventClass;
+    }
+
     public Handler getHandler() {
-        return handler;
+        return this.handler;
     }
 
     public Order getOrder() {
-        return order;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        OrderedHandler that = (OrderedHandler) o;
-        return handler.equals(that.handler);
-    }
-
-    @Override
-    public int hashCode() {
-        return handler.hashCode();
+        return this.order;
     }
 
 }

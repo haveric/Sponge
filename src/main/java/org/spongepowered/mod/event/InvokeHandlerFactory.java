@@ -52,10 +52,10 @@ class InvokeHandlerFactory implements HandlerFactory {
         @Override
         public void handle(Event event) throws InvocationTargetException {
             try {
-                if (ignoreCancelled && (event instanceof Cancellable) && ((Cancellable) event).isCancelled()) {
+                if (this.ignoreCancelled && (event instanceof Cancellable) && ((Cancellable) event).isCancelled()) {
                     return;
                 }
-                method.invoke(object, event);
+                this.method.invoke(this.object, event);
             } catch (IllegalAccessException e) {
                 throw new InvocationTargetException(e);
             }
@@ -68,16 +68,16 @@ class InvokeHandlerFactory implements HandlerFactory {
 
             InvokeHandler that = (InvokeHandler) o;
 
-            if (!method.equals(that.method)) return false;
-            if (!object.equals(that.object)) return false;
+            if (!this.method.equals(that.method)) return false;
+            if (!this.object.equals(that.object)) return false;
 
             return true;
         }
 
         @Override
         public int hashCode() {
-            int result = object.hashCode();
-            result = 31 * result + method.hashCode();
+            int result = this.object.hashCode();
+            result = 31 * result + this.method.hashCode();
             return result;
         }
     }
