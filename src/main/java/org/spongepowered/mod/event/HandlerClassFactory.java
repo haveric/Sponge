@@ -29,7 +29,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import org.objectweb.asm.*;
-import org.spongepowered.api.util.event.Cancellable;
 
 import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -73,7 +72,7 @@ class HandlerClassFactory implements HandlerFactory {
             CacheKey key = new CacheKey(object.getClass(), method, ignoreCancelled);
             try {
                 return (Handler) cache.getUnchecked(key)
-                        .getConstructor(Method.class, boolean.class)
+                        .getConstructor(object.getClass(), Method.class)
                         .newInstance(object, method);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to create a handler", e);
@@ -91,69 +90,119 @@ class HandlerClassFactory implements HandlerFactory {
 
     public byte[] generateClass(Class<?> objectClass, Method method, Class<?> eventClass, boolean ignoreCancelled, String className) {
         ClassWriter cw = new ClassWriter(COMPUTE_FRAMES | COMPUTE_MAXS);
+        FieldVisitor fv;
         MethodVisitor mv;
 
-        String internalName = className.replace(".", "/");
-        String targetInternalName = Type.getInternalName(objectClass);
+        String createdInternalName = className.replace(".", "/");
+        String invokedInternalName = Type.getInternalName(objectClass);
+        String eventInternalName = Type.getInternalName(eventClass);
 
-        cw.visit(Opcodes.V1_6, ACC_PUBLIC + ACC_SUPER, internalName, null, Type.getInternalName(MethodHandler.class), null);
+        cw.visit(Opcodes.V1_6, ACC_PUBLIC + ACC_SUPER, createdInternalName, null, "java/lang/Object", new String[] { Type.getInternalName(Handler.class) });
 
         {
-            mv = cw.visitMethod(ACC_PUBLIC, "<init>", "(L" + targetInternalName + ";Ljava/lang/reflect/Method;)V", null, null);
+            fv = cw.visitField(ACC_PRIVATE + ACC_FINAL, "object", "L" + invokedInternalName + ";", null, null);
+            fv.visitEnd();
+        }
+        {
+            fv = cw.visitField(ACC_PRIVATE + ACC_FINAL, "method", "Ljava/lang/reflect/Method;", null, null);
+            fv.visitEnd();
+        }
+        {
+            mv = cw.visitMethod(ACC_PUBLIC, "<init>", "(L" + invokedInternalName + ";Ljava/lang/reflect/Method;)V", null, null);
             mv.visitCode();
             mv.visitVarInsn(ALOAD, 0);
+            mv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+            mv.visitVarInsn(ALOAD, 0);
             mv.visitVarInsn(ALOAD, 1);
+            mv.visitFieldInsn(PUTFIELD, createdInternalName, "object", "L" + invokedInternalName + ";");
+            mv.visitVarInsn(ALOAD, 0);
             mv.visitVarInsn(ALOAD, 2);
-            mv.visitMethodInsn(INVOKESPECIAL, Type.getInternalName(MethodHandler.class), "<init>", "(Ljava/lang/Object;Ljava/lang/reflect/Method;)V", false);
+            mv.visitFieldInsn(PUTFIELD, createdInternalName, "method", "Ljava/lang/reflect/Method;");
             mv.visitInsn(RETURN);
             mv.visitMaxs(0, 0);
             mv.visitEnd();
         }
         {
-            mv = cw.visitMethod(ACC_PUBLIC, "handle", "(Lorg/spongepowered/api/util/event/Event;)V", null, new String[] {"java/lang/reflect/InvocationTargetException"});
+            mv = cw.visitMethod(ACC_PUBLIC, "handle", "(Lorg/spongepowered/api/util/event/Event;)V", null, null);
             mv.visitCode();
-
-            if (ignoreCancelled) {
-                Label exit = new Label();
-                mv.visitVarInsn(ALOAD, 1);
-                mv.visitTypeInsn(INSTANCEOF, Type.getInternalName(Cancellable.class));
-                mv.visitJumpInsn(IFEQ, exit);
-                mv.visitVarInsn(ALOAD, 1);
-                mv.visitTypeInsn(CHECKCAST, Type.getInternalName(Cancellable.class));
-                mv.visitMethodInsn(INVOKEINTERFACE, Type.getInternalName(Cancellable.class), "isCancelled", "()Z", true);
-                mv.visitJumpInsn(IFEQ, exit);
-                mv.visitInsn(RETURN);
-                mv.visitLabel(exit);
-            }
-
             mv.visitVarInsn(ALOAD, 0);
-            mv.visitMethodInsn(INVOKEVIRTUAL, internalName, "getObject", "()Ljava/lang/Object;", false);
-            mv.visitTypeInsn(CHECKCAST, targetInternalName);
+            mv.visitFieldInsn(GETFIELD, createdInternalName, "object", "L" + invokedInternalName + ";");
             mv.visitVarInsn(ALOAD, 1);
-            mv.visitTypeInsn(CHECKCAST, Type.getInternalName(eventClass));
-            mv.visitMethodInsn(INVOKEVIRTUAL, targetInternalName, method.getName(), "(L" + Type.getInternalName(eventClass) + ";)V", false);
-
+            mv.visitTypeInsn(CHECKCAST, eventInternalName);
+            mv.visitMethodInsn(INVOKEVIRTUAL, "" + invokedInternalName + "", method.getName(), "(L" + eventInternalName + ";)V", false);
             mv.visitInsn(RETURN);
-            mv.visitMaxs(0, 0);
+            mv.visitMaxs(2, 2);
             mv.visitEnd();
         }
         {
-            mv = cw.visitMethod(ACC_PUBLIC + ACC_BRIDGE + ACC_SYNTHETIC, "hashCode", "()I", null, null);
-            mv.visitCode();
-            mv.visitVarInsn(ALOAD, 0);
-            mv.visitMethodInsn(INVOKESPECIAL, Type.getInternalName(MethodHandler.class), "hashCode", "()I", false);
-            mv.visitInsn(IRETURN);
-            mv.visitMaxs(0, 0);
-            mv.visitEnd();
-        }
-        {
-            mv = cw.visitMethod(ACC_PUBLIC + ACC_BRIDGE + ACC_SYNTHETIC, "equals", "(Ljava/lang/Object;)Z", null, null);
+            mv = cw.visitMethod(ACC_PUBLIC, "equals", "(Ljava/lang/Object;)Z", null, null);
             mv.visitCode();
             mv.visitVarInsn(ALOAD, 0);
             mv.visitVarInsn(ALOAD, 1);
-            mv.visitMethodInsn(INVOKESPECIAL, Type.getInternalName(MethodHandler.class), "equals", "(Ljava/lang/Object;)Z", false);
+            Label l0 = new Label();
+            mv.visitJumpInsn(IF_ACMPNE, l0);
+            mv.visitInsn(ICONST_1);
+            mv.visitInsn(IRETURN);
+            mv.visitLabel(l0);
+            mv.visitVarInsn(ALOAD, 1);
+            Label l1 = new Label();
+            mv.visitJumpInsn(IFNULL, l1);
+            mv.visitVarInsn(ALOAD, 0);
+            mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Object", "getClass", "()Ljava/lang/Class;", false);
+            mv.visitVarInsn(ALOAD, 1);
+            mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Object", "getClass", "()Ljava/lang/Class;", false);
+            Label l2 = new Label();
+            mv.visitJumpInsn(IF_ACMPEQ, l2);
+            mv.visitLabel(l1);
+            mv.visitInsn(ICONST_0);
+            mv.visitInsn(IRETURN);
+            mv.visitLabel(l2);
+            mv.visitVarInsn(ALOAD, 1);
+            mv.visitTypeInsn(CHECKCAST, createdInternalName);
+            mv.visitVarInsn(ASTORE, 2);
+            mv.visitVarInsn(ALOAD, 0);
+            mv.visitFieldInsn(GETFIELD, createdInternalName, "method", "Ljava/lang/reflect/Method;");
+            mv.visitVarInsn(ALOAD, 2);
+            mv.visitFieldInsn(GETFIELD, createdInternalName, "method", "Ljava/lang/reflect/Method;");
+            mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/reflect/Method", "equals", "(Ljava/lang/Object;)Z", false);
+            Label l3 = new Label();
+            mv.visitJumpInsn(IFNE, l3);
+            mv.visitInsn(ICONST_0);
+            mv.visitInsn(IRETURN);
+            mv.visitLabel(l3);
+            mv.visitVarInsn(ALOAD, 0);
+            mv.visitFieldInsn(GETFIELD, createdInternalName, "object", "L" + invokedInternalName + ";");
+            mv.visitVarInsn(ALOAD, 2);
+            mv.visitFieldInsn(GETFIELD, createdInternalName, "object", "L" + invokedInternalName + ";");
+            mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Object", "equals", "(Ljava/lang/Object;)Z", false);
+            Label l4 = new Label();
+            mv.visitJumpInsn(IFNE, l4);
+            mv.visitInsn(ICONST_0);
+            mv.visitInsn(IRETURN);
+            mv.visitLabel(l4);
+            mv.visitInsn(ICONST_1);
             mv.visitInsn(IRETURN);
             mv.visitMaxs(0, 0);
+            mv.visitEnd();
+        }
+        {
+            mv = cw.visitMethod(ACC_PUBLIC, "hashCode", "()I", null, null);
+            mv.visitCode();
+            mv.visitVarInsn(ALOAD, 0);
+            mv.visitFieldInsn(GETFIELD, createdInternalName, "object", "L" + invokedInternalName + ";");
+            mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Object", "hashCode", "()I", false);
+            mv.visitVarInsn(ISTORE, 1);
+            mv.visitIntInsn(BIPUSH, 31);
+            mv.visitVarInsn(ILOAD, 1);
+            mv.visitInsn(IMUL);
+            mv.visitVarInsn(ALOAD, 0);
+            mv.visitFieldInsn(GETFIELD, createdInternalName, "method", "Ljava/lang/reflect/Method;");
+            mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/reflect/Method", "hashCode", "()I", false);
+            mv.visitInsn(IADD);
+            mv.visitVarInsn(ISTORE, 1);
+            mv.visitVarInsn(ILOAD, 1);
+            mv.visitInsn(IRETURN);
+            mv.visitMaxs(2, 2);
             mv.visitEnd();
         }
         cw.visitEnd();

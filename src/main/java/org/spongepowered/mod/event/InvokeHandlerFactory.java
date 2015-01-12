@@ -38,11 +38,14 @@ class InvokeHandlerFactory implements HandlerFactory {
         return new InvokeHandler(object, method, ignoreCancelled);
     }
 
-    private static class InvokeHandler extends MethodHandler {
+    private static class InvokeHandler implements Handler {
+        private final Object object;
+        private final Method method;
         private final boolean ignoreCancelled;
 
         public InvokeHandler(Object object, Method method, boolean ignoreCancelled) {
-            super(object, method);
+            this.object = object;
+            this.method = method;
             this.ignoreCancelled = ignoreCancelled;
         }
 
@@ -52,10 +55,30 @@ class InvokeHandlerFactory implements HandlerFactory {
                 if (ignoreCancelled && (event instanceof Cancellable) && ((Cancellable) event).isCancelled()) {
                     return;
                 }
-                getMethod().invoke(getObject(), event);
+                method.invoke(object, event);
             } catch (IllegalAccessException e) {
                 throw new InvocationTargetException(e);
             }
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            InvokeHandler that = (InvokeHandler) o;
+
+            if (!method.equals(that.method)) return false;
+            if (!object.equals(that.object)) return false;
+
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = object.hashCode();
+            result = 31 * result + method.hashCode();
+            return result;
         }
     }
 

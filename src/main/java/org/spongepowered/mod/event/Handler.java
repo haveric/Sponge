@@ -29,7 +29,7 @@ import org.spongepowered.api.util.event.Event;
 
 import java.lang.reflect.InvocationTargetException;
 
-interface Handler {
+public interface Handler {
 
     void handle(Event event) throws InvocationTargetException;
 
