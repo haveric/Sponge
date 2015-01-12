@@ -68,10 +68,10 @@ public class SpongeEventBus implements EventManager {
      * <p>The cache is currently entirely invalidated if handlers are added
      * or removed.</p>
      */
-    private final LoadingCache<Class<?>, List<Handler>> handlersCache =
-            CacheBuilder.newBuilder().build(new CacheLoader<Class<?>, List<Handler>>() {
+    private final LoadingCache<Class<?>, HandlerCache> handlersCache =
+            CacheBuilder.newBuilder().build(new CacheLoader<Class<?>, HandlerCache>() {
                 @Override
-                public List<Handler> load(Class<?> type) throws Exception {
+                public HandlerCache load(Class<?> type) throws Exception {
                     return bakeHandlers(type);
                 }
             });
@@ -83,29 +83,24 @@ public class SpongeEventBus implements EventManager {
     }
 
     @SuppressWarnings("unchecked")
-    private List<Handler> bakeHandlers(Class<?> rootType) {
-        List<RegisteredHandler> ordered = Lists.newArrayList();
-        List<Handler> handlers = Lists.newArrayList();
+    private HandlerCache bakeHandlers(Class<?> rootType) {
+        List<RegisteredHandler> registrations = Lists.newArrayList();
         Set<Class<?>> types = (Set) TypeToken.of(rootType).getTypes().rawTypes();
 
         synchronized (this.lock) {
             for (Class<?> type : types) {
                 if (Event.class.isAssignableFrom(type)) {
-                    ordered.addAll(this.handlersByEvent.get(type));
+                    registrations.addAll(this.handlersByEvent.get(type));
                 }
             }
         }
 
-        Collections.sort(ordered);
+        Collections.sort(registrations);
 
-        for (RegisteredHandler o : ordered) {
-            handlers.add(o.getHandler());
-        }
-
-        return handlers;
+        return new HandlerCache(registrations);
     }
 
-    private List<Handler> getHandlers(Class<?> type) {
+    private HandlerCache getHandlerCache(Class<?> type) {
         return this.handlersCache.getUnchecked(type);
     }
 
@@ -218,7 +213,18 @@ public class SpongeEventBus implements EventManager {
     public boolean post(Event event) {
         checkNotNull(event, "event");
 
-        for (Handler handler : getHandlers(event.getClass())) {
+        for (Handler handler : getHandlerCache(event.getClass()).getHandlers()) {
+            callListener(handler, event);
+        }
+
+        return event instanceof Cancellable && ((Cancellable) event).isCancelled();
+    }
+
+    public boolean post(Event event, Order order) {
+        checkNotNull(event, "event");
+        checkNotNull(event, "order");
+
+        for (Handler handler : getHandlerCache(event.getClass()).getHandlersByOrder(order)) {
             callListener(handler, event);
         }
 
