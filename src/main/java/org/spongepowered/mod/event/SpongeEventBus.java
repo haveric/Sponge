@@ -128,12 +128,12 @@ public class SpongeEventBus implements EventManager {
         return handlers;
     }
 
-    private boolean register(Class<?> type, Handler handler, Order order, PluginContainer container) {
+    public boolean register(Class<?> type, Handler handler, Order order, PluginContainer container) {
         getHandlerSetHierarchy(type); // Build cache early
         return getHandlerSet(type).register(handler, order, container);
     }
 
-    private boolean unregister(Class<?> type, Handler handler) {
+    public boolean unregister(Class<?> type, Handler handler) {
         return getHandlerSet(type).remove(handler);
     }
 
