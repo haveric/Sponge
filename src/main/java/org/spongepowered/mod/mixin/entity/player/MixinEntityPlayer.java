@@ -24,6 +24,7 @@
  */
 package org.spongepowered.mod.mixin.entity.player;
 
+import com.mojang.authlib.GameProfile;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Container;
@@ -34,6 +35,7 @@ import org.spongepowered.api.util.annotation.NonnullByDefault;
 import org.spongepowered.asm.mixin.Implements;
 import org.spongepowered.asm.mixin.Interface;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 
 @NonnullByDefault
@@ -46,6 +48,9 @@ public abstract class MixinEntityPlayer extends EntityLivingBase {
     @Shadow public Container openContainer;
 
     @Shadow protected FoodStats foodStats;
+
+    @Shadow
+    public GameProfile gameProfile;
 
     public MixinEntityPlayer(World worldIn) {
         super(worldIn);
@@ -69,6 +74,15 @@ public abstract class MixinEntityPlayer extends EntityLivingBase {
 
     public boolean human$isViewingInventory() {
         return this.openContainer == this.inventoryContainer;
+    }
+
+    public String human$getName() {
+        return this.getName();
+    }
+
+    @Overwrite
+    public String getName() {
+        return this.gameProfile.getName();
     }
 
 }
