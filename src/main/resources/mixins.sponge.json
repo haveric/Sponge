@@ -45,6 +45,7 @@
         "entity.hanging.MixinEntityLeashKnot",
         "entity.hanging.art.MixinEnumArt",
         "entity.living.MixinEntityAgeable",
+        "entity.living.MixinEntityItem",
         "entity.living.MixinEntityLiving",
         "entity.living.MixinEntityLivingBase",
         "entity.living.MixinArmorStand",
@@ -158,3 +159,4 @@
         "world.biome.MixinBiomeGenBase"
     ]
 }
+
